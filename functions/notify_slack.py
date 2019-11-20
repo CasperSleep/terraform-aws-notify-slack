@@ -48,14 +48,14 @@ def cloudwatch_notification(message, region):
 
 def s3_notification(message):
     return {
-        "fallback": f"S3 notification received from {message['Records']['s3']['bucket']['name']}",
+        "fallback": f"S3 notification received from {message['Records'][0]['s3']['bucket']['name']}",
         "fields": [
             {"title": "Event",
-                "value": f"{message['Records']['eventName']}", "short": True},
+                "value": f"{message['Records'][0]['eventName']}", "short": True},
             {"title": "Object name",
-                "value": f"{message['Records']['object']['key']}", "short": True},
+                "value": f"{message['Records'][0]['s3']['object']['key']}", "short": True},
             {"title": "Bucket Name",
-             "value": f"{message['Records']['s3']['bucket']['name']}", "short": False}
+             "value": f"{message['Records'][0]['s3']['bucket']['name']}", "short": False}
         ]
     }
 
