@@ -1,6 +1,10 @@
 from __future__ import print_function
-import os, boto3, json, base64
-import urllib.request, urllib.parse
+import os
+import boto3
+import json
+import base64
+import urllib.request
+import urllib.parse
 import logging
 
 
@@ -9,7 +13,8 @@ def decrypt(encrypted_url):
     region = os.environ['AWS_REGION']
     try:
         kms = boto3.client('kms', region_name=region)
-        plaintext = kms.decrypt(CiphertextBlob=base64.b64decode(encrypted_url))['Plaintext']
+        plaintext = kms.decrypt(CiphertextBlob=base64.b64decode(encrypted_url))[
+            'Plaintext']
         return plaintext.decode()
     except Exception:
         logging.exception("Failed to decrypt URL with KMS")
@@ -19,28 +24,47 @@ def cloudwatch_notification(message, region):
     states = {'OK': 'good', 'INSUFFICIENT_DATA': 'warning', 'ALARM': 'danger'}
 
     return {
-            "color": states[message['NewStateValue']],
-            "fallback": "Alarm {} triggered".format(message['AlarmName']),
-            "fields": [
-                { "title": "Alarm Name", "value": message['AlarmName'], "short": True },
-                { "title": "Alarm Description", "value": message['AlarmDescription'], "short": False},
-                { "title": "Alarm reason", "value": message['NewStateReason'], "short": False},
-                { "title": "Old State", "value": message['OldStateValue'], "short": True },
-                { "title": "Current State", "value": message['NewStateValue'], "short": True },
-                {
-                    "title": "Link to Alarm",
-                    "value": "https://console.aws.amazon.com/cloudwatch/home?region=" + region + "#alarm:alarmFilter=ANY;name=" + urllib.parse.quote_plus(message['AlarmName']),
-                    "short": False
-                }
-            ]
-        }
+        "color": states[message['NewStateValue']],
+        "fallback": "Alarm {} triggered".format(message['AlarmName']),
+        "fields": [
+            {"title": "Alarm Name",
+                    "value": message['AlarmName'], "short": True},
+            {"title": "Alarm Description",
+             "value": message['AlarmDescription'], "short": False},
+            {"title": "Alarm reason",
+             "value": message['NewStateReason'], "short": False},
+            {"title": "Old State",
+             "value": message['OldStateValue'], "short": True},
+            {"title": "Current State",
+             "value": message['NewStateValue'], "short": True},
+            {
+                "title": "Link to Alarm",
+                "value": "https://console.aws.amazon.com/cloudwatch/home?region=" + region + "#alarm:alarmFilter=ANY;name=" + urllib.parse.quote_plus(message['AlarmName']),
+                "short": False
+            }
+        ]
+    }
+
+
+def s3_notification(message):
+    return {
+        "fallback": f"S3 notification received from {message['Records']['s3']['bucket']['name']}",
+        "fields": [
+            {"title": "Event",
+                "value": f"{message['Records']['eventName']}", "short": True},
+            {"title": "Object name",
+                "value": f"{message['Records']['object']['key']}", "short": True},
+            {"title": "Bucket Name",
+             "value": f"{message['Records']['s3']['bucket']['name']}", "short": False}
+        ]
+    }
 
 
 def default_notification(subject, message):
     return {
-            "fallback": "A new message",
-            "fields": [{"title": subject if subject else "Message", "value": json.dumps(message), "short": False}]
-        }
+        "fallback": "A new message",
+        "fields": [{"title": subject if subject else "Message", "value": json.dumps(message), "short": False}]
+    }
 
 
 # Send a message to a slack channel
@@ -66,13 +90,18 @@ def notify_slack(subject, message, region):
             logging.exception(f'JSON decode error: {err}')
     if "AlarmName" in message:
         notification = cloudwatch_notification(message, region)
-        payload['text'] = "AWS CloudWatch notification - " + message["AlarmName"]
+        payload['text'] = "AWS CloudWatch notification - " + \
+            message["AlarmName"]
         payload['attachments'].append(notification)
+    elif subject == "Amazon S3 Notification":
+        payload['text'] = "AWS S3 Notification"
+        payload['attachments'].append(s3_notification(message))
     else:
         payload['text'] = "AWS notification"
         payload['attachments'].append(default_notification(subject, message))
 
-    data = urllib.parse.urlencode({"payload": json.dumps(payload)}).encode("utf-8")
+    data = urllib.parse.urlencode(
+        {"payload": json.dumps(payload)}).encode("utf-8")
     req = urllib.request.Request(slack_url)
     urllib.request.urlopen(req, data)
 
